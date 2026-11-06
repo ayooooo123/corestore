@@ -155,6 +155,13 @@ class CoreTracker {
 
   _gcCycle() {
     for (const core of this._gcing) {
+      // A peer can open a channel on an already attached stream without going through resume(): spare a core
+      // that is in use again. Its next checkIfIdle() strikes it anew once it is idle.
+      if (!core.closing && (core.hasSession() || !core.replicator.idle())) {
+        core.gc = 0
+        this._gcing.delete(core)
+        continue
+      }
       if (++core.gc < 4) continue
       const gc = this._gc.bind(this, core)
       core.close().then(gc, gc)

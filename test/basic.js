@@ -867,3 +867,25 @@ test('get by key after core was opened by discovery key exposes the key sync', a
   t.alike(session.key, key, 'key is still correct after ready')
   t.is(session.length, 1)
 })
+
+test('gc spares an idle core that a peer then opens on an already attached stream', async function (t) {
+  const a = await create(t)
+  const b = await create(t)
+
+  const core = a.get({ name: 'served' })
+  await core.append('block')
+  const key = core.key
+  // Last session gone: the core is struck for gc, but it still counts as downloading for the linger,
+  // so the next stream attaches it up front and the remote's open skips resume().
+  await core.close()
+
+  replicate(a, b, t)
+
+  const clone = b.get({ key })
+  t.teardown(() => clone.close())
+  t.alike(await clone.get(0), b4a.from('block'))
+
+  await new Promise((resolve) => setTimeout(resolve, 9000)) // more than 4 gc cycles
+
+  t.is(clone.peers.length, 1, 'remote still has its peer')
+})
